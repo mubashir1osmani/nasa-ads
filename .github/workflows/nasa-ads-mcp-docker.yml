@@ -3,11 +3,7 @@ name: Build and Push nasa-ads-mcp
 on:
   push:
     branches: [main]
-    paths:
-      - "nasa-ads-mcp-server/**"
-      - ".github/workflows/nasa-ads-mcp-docker.yml"
-    tags:
-      - "nasa-ads-mcp-v*"
+    tags: ["v*"]
   workflow_dispatch:
 
 jobs:
@@ -16,9 +12,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    defaults:
-      run:
-        working-directory: nasa-ads-mcp-server
 
     steps:
       - uses: actions/checkout@v4
@@ -47,12 +40,12 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=sha-,format=short
-            type=match,pattern=nasa-ads-mcp-v(.*),group=1
+            type=semver,pattern={{version}}
 
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
-          context: nasa-ads-mcp-server
+          context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
