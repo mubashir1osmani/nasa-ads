@@ -1,0 +1,61 @@
+name: Build and Push nasa-ads-mcp
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "nasa-ads-mcp-server/**"
+      - ".github/workflows/nasa-ads-mcp-docker.yml"
+    tags:
+      - "nasa-ads-mcp-v*"
+  workflow_dispatch:
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        working-directory: nasa-ads-mcp-server
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build wheel
+        run: uv build --wheel
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/nasa-ads-mcp-server
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
+            type=match,pattern=nasa-ads-mcp-v(.*),group=1
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: nasa-ads-mcp-server
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=nasa-ads-mcp
+          cache-to: type=gha,mode=max,scope=nasa-ads-mcp
