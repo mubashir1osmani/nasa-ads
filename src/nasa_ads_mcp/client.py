@@ -7,9 +7,14 @@ All requests need `Authorization: Bearer $ADS_API_TOKEN`.
 from __future__ import annotations
 
 import os
+import re
 from typing import Any, Iterable
 
 import httpx
+
+# arXiv ID patterns: new-style (YYMM.NNNNN[vN]) and old-style (archive/YYMMNNN).
+_ARXIV_NEW = re.compile(r"\b(\d{4}\.\d{4,5})(?:v\d+)?\b")
+_ARXIV_OLD = re.compile(r"\b([a-z\-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?\b")
 
 BASE = "https://api.adsabs.harvard.edu/v1"
 DEFAULT_TIMEOUT = 30.0
@@ -173,6 +178,37 @@ async def export_refs(bibcodes: list[str], fmt: str = "bibtex") -> str:
         _check(r)
         data = r.json()
     return data.get("export", "")
+
+
+async def get_arxiv_id(bibcode: str) -> dict[str, Any]:
+    """Resolve a bibcode to its arXiv identifier (for chaining to arxiv-mcp).
+
+    Checks the `identifier` and `eprint_id` fields. Returns the bare arXiv ID
+    (e.g. `2401.12345` or `astro-ph/9905116`) plus the source field it came from.
+    """
+    paper = await get_paper(bibcode, fl="bibcode,identifier,eprint_id,doi")
+    candidates: list[str] = []
+    for ident in paper.get("identifier", []) or []:
+        if isinstance(ident, str):
+            candidates.append(ident)
+    eprint = paper.get("eprint_id")
+    if isinstance(eprint, str):
+        candidates.append(eprint)
+
+    for c in candidates:
+        s = c.removeprefix("arXiv:").removeprefix("arxiv:")
+        if m := _ARXIV_NEW.search(s):
+            return {"bibcode": bibcode, "arxiv_id": m.group(1), "source": c}
+        if m := _ARXIV_OLD.search(s):
+            return {"bibcode": bibcode, "arxiv_id": m.group(1), "source": c}
+
+    return {
+        "bibcode": bibcode,
+        "arxiv_id": None,
+        "doi": paper.get("doi"),
+        "checked": candidates,
+        "note": "No arXiv ID found. Paper may be journal-only; try the DOI.",
+    }
 
 
 async def resolve_links(bibcode: str, link_type: str | None = None) -> dict[str, Any]:

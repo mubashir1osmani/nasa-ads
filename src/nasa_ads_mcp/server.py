@@ -102,6 +102,17 @@ async def export_refs(bibcodes: list[str], format: str = "bibtex") -> str:
 
 
 @mcp.tool()
+async def get_arxiv_id(bibcode: str) -> str:
+    """Resolve a bibcode to its arXiv ID for chaining into arxiv-mcp-server.
+
+    Returns `{bibcode, arxiv_id, source}` on success, or `{arxiv_id: null, doi, ...}`
+    if the paper has no arXiv preprint. Pass `arxiv_id` to arxiv-mcp's
+    `download_paper` then `read_paper` to get the full text as markdown.
+    """
+    return _j(await ads.get_arxiv_id(bibcode))
+
+
+@mcp.tool()
 async def resolve_links(bibcode: str, link_type: str | None = None) -> str:
     """Resolver links for a bibcode (arxiv, PDF, DOI, data products, etc.).
 
@@ -173,6 +184,24 @@ def bib_export(query: str, n: int = 10, format: str = "bibtex") -> str:
         f"citation_count, then call `export_refs` with format='{format}' on those "
         "bibcodes. Return the exported string verbatim in a fenced block so I "
         "can paste it into my .bib file."
+    )
+
+
+@mcp.prompt()
+def deep_read(bibcode: str) -> str:
+    """Pull the full paper text via arxiv-mcp and analyze it thoroughly."""
+    return (
+        f"Do a deep read of {bibcode}.\n"
+        "  1. `get_abstract` for orientation (title, authors, year, abstract).\n"
+        f"  2. `get_arxiv_id` on {bibcode} to resolve the arXiv ID. If it returns "
+        "`arxiv_id: null`, stop and report that no preprint exists — fall back to "
+        "the abstract + `get_references` for context.\n"
+        "  3. Hand the `arxiv_id` to arxiv-mcp-server: call `download_paper` to "
+        "fetch + convert to markdown, then `read_paper` to load the full text.\n"
+        "  4. Read the whole thing. Summarize: motivation, method, key results "
+        "(with numbers), limitations the authors flag, and what's novel vs. "
+        "the references list.\n"
+        "  5. End with 2-3 follow-up questions worth chasing via `get_citations`."
     )
 
 
